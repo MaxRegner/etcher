@@ -113,12 +113,46 @@ electron.app.on('open-url', async (event, data) => {
 	await selectImageURL(data);
 });
 
+electron.app.on('ready', async () => {
+	const argv = process.argv.slice(1);
+	const url = await getCommandLineURL(argv);
+	await selectImageURL(url);
+	if (packageUpdatable) {
+		checkForUpdates(1000 * 60 * 60); // 1 hour
+	}
+});
+
+electron.app.on('window-all-closed', () => {
+	electron.app.quit();
+});
+
+
 interface AutoUpdaterConfig {
 	autoDownload?: boolean;
 	autoInstallOnAppQuit?: boolean;
 	allowPrerelease?: boolean;
 	fullChangelog?: boolean;
 	allowDowngrade?: boolean;
+}
+
+async function initAutoUpdater() {
+	const config = await getConfig<AutoUpdaterConfig>('autoUpdater');
+	if (config) {
+		autoUpdater.autoDownload = config.autoDownload;
+		autoUpdater.autoInstallOnAppQuit = config.autoInstallOnAppQuit;
+		autoUpdater.allowPrerelease = config.allowPrerelease;
+		autoUpdater.fullChangelog = config.fullChangelog;
+		autoUpdater.allowDowngrade = config.allowDowngrade;
+	}
+}
+
+async function init() {
+	await initAutoUpdater();
+	if (packageUpdatable) {
+		await checkForUpdates(1000 * 60 * 60 * 24); // 1 day
+	}
+	const url = await getCommandLineURL(process.argv);
+	await selectImageURL(url);
 }
 
 async function createMainWindow() {
@@ -212,6 +246,141 @@ async function createMainWindow() {
 	return mainWindow;
 }
 
+async function checkForUpdates(checkForUpdatesTimer: number) {
+	try {
+		await autoUpdater.checkForUpdates();
+	} catch (err) {
+		logException(err);
+	}
+	setTimeout(() => {
+		checkForUpdates(checkForUpdatesTimer);
+	}, checkForUpdatesTimer);
+}
+
+async function getConfig(configUrl: string) {
+	const response = await fetch(configUrl);
+	if (!response.ok) {
+		throw new Error(
+			`Failed to fetch config from ${configUrl}: ${response.status} ${response.statusText}`,
+		);
+	}
+	return response.json();
+}
+
+async function createAboutWindow() {
+	const aboutWindow = new electron.BrowserWindow({
+		width: 400,
+		height: 400,
+		frame: false,
+		useContentSize: true,
+		show: false,
+		resizable: false,
+		maximizable: false,
+		autoHideMenuBar: true,
+		titleBarStyle: 'hiddenInset',
+		icon: path.join(__dirname, 'media', 'icon.png'),
+		darkTheme: true,
+		webPreferences: {
+			backgroundThrottling: false,
+			nodeIntegration: true,
+			contextIsolation: false,
+			webviewTag: true,
+			enableRemoteModule: true,
+		},
+	});
+
+	aboutWindow.loadURL(
+		`file://${path.join(
+			'/',
+			...__dirname.split(path.sep).map(encodeURIComponent),
+			'about.html',
+		)}`,
+	);
+
+	const page = aboutWindow.webContents;
+
+	page.once('did-frame-finish-load', async () => {
+		aboutWindow.show();
+	});
+	return aboutWindow;
+}
+
+async function createSelectionWindow() {
+	const selectionWindow = new electron.BrowserWindow({
+		width: 400,
+		height: 400,
+		frame: false,
+		useContentSize: true,
+		show: false,
+		resizable: false,
+		maximizable: false,
+		autoHideMenuBar: true,
+		titleBarStyle: 'hiddenInset',
+		icon: path.join(__dirname, 'media', 'icon.png'),
+		darkTheme: true,
+		webPreferences: {
+			backgroundThrottling: false,
+			nodeIntegration: true,
+			contextIsolation: false,
+			webviewTag: true,
+			enableRemoteModule: true,
+		},
+	});
+
+	selectionWindow.loadURL(
+		`file://${path.join(
+			'/',
+			...__dirname.split(path.sep).map(encodeURIComponent),
+			'selection.html',
+		)}`,
+	);
+
+	const page = selectionWindow.webContents;
+
+	page.once('did-frame-finish-load', async () => {
+		selectionWindow.show();
+	});
+	return selectionWindow;
+}
+
+async function createSettingsWindow() {
+	const settingsWindow = new electron.BrowserWindow({
+		width: 400,
+		height: 400,
+		frame: false,
+		useContentSize: true,
+		show: false,
+		resizable: false,
+		maximizable: false,
+		autoHideMenuBar: true,
+		titleBarStyle: 'hiddenInset',
+		icon: path.join(__dirname, 'media', 'icon.png'),
+		darkTheme: true,
+		webPreferences: {
+			backgroundThrottling: false,
+			nodeIntegration: true,
+			contextIsolation: false,
+			webviewTag: true,
+			enableRemoteModule: true,
+		},
+	});
+
+	settingsWindow.loadURL(
+		`file://${path.join(
+			'/',
+			...__dirname.split(path.sep).map(encodeURIComponent),
+			'settings.html',
+		)}`,
+	);
+
+	const page = settingsWindow.webContents;
+
+	page.once('did-frame-finish-load', async () => {
+		settingsWindow.show();
+	});
+	return settingsWindow;
+}
+
 electron.app.allowRendererProcessReuse = false;
 electron.app.on('window-all-closed', electron.app.quit);
 
@@ -242,6 +411,9 @@ async function main(): Promise<void> {
 		await selectImageURL(await getCommandLineURL(process.argv));
 	}
 }
+
+main().catch(logException);
+
 
 main();
 
